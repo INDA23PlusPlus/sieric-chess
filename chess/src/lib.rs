@@ -1,16 +1,16 @@
-#[derive(Debug,PartialEq,Eq,Clone)]
+#[derive(Debug,Hash,PartialEq,Eq,Clone)]
 pub enum ChessColor {
-    White,
-    Black,
+    Wh,
+    Bl,
 }
 
 impl ChessColor {
     fn dir(&self) -> isize {
-        return if *self == ChessColor::White { 1 } else { -1 };
+        return if *self == ChessColor::Wh { 1 } else { -1 };
     }
 }
 
-#[derive(Debug,PartialEq,Eq)]
+#[derive(Debug,Hash,PartialEq,Eq)]
 pub enum ChessPiece {
     None,
     /* true means white, false means black */
@@ -43,16 +43,6 @@ pub struct ChessGame {
     turn: ChessColor,
 }
 
-#[derive(Debug,PartialEq,Eq)]
-#[allow(dead_code)]
-pub struct ChessMove {
-    origin: usize,
-    target: usize,
-    captures: bool,
-    promotes: Option<ChessPiece>,
-    en_passant: bool,
-}
-
 impl ChessMove {
     pub fn to(origin: usize, target: usize) -> ChessMove {
         return ChessMove {
@@ -73,23 +63,33 @@ impl ChessMove {
     }
 }
 
+#[derive(Debug,Hash,PartialEq,Eq)]
+#[allow(dead_code)]
+pub struct ChessMove {
+    origin: usize,
+    target: usize,
+    captures: bool,
+    promotes: Option<ChessPiece>,
+    en_passant: bool,
+}
+
 impl ChessGame {
     pub fn new() -> ChessGame {
         use ChessPiece::*;
         use ChessColor::*;
 
         let board: [ChessPiece; 64] = [
-            R(White), N(White), B(White), Q(White), K(White), B(White), N(White), R(White),
-            P(White), P(White), P(White), P(White), P(White), P(White), P(White), P(White),
+            R(Wh), N(Wh), B(Wh), Q(Wh), K(Wh), B(Wh), N(Wh), R(Wh),
+            P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh),
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
-            P(Black), P(Black), P(Black), P(Black), P(Black), P(Black), P(Black), P(Black),
-            R(Black), N(Black), B(Black), Q(Black), K(Black), B(Black), N(Black), R(Black),
+            P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl),
+            R(Bl), N(Bl), B(Bl), Q(Bl), K(Bl), B(Bl), N(Bl), R(Bl),
         ];
 
-        return ChessGame { board, turn: White };
+        return ChessGame { board, turn: Wh };
     }
 
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
@@ -118,7 +118,7 @@ impl ChessGame {
 
     fn collides_opponent(&self, i: usize) -> bool {
         return self.board[i] != ChessPiece::None
-            && self.board[i].unwrap() == ChessColor::Black;
+            && self.board[i].unwrap() == ChessColor::Bl;
     }
 
     fn pawn_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
@@ -156,22 +156,27 @@ impl ChessGame {
         }
     }
 
+    #[allow(unused_variables)]
     fn rook_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
         // out.push(ChessMove::to(i, i+1));
     }
 
+    #[allow(unused_variables)]
     fn knight_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
         // out.push(ChessMove::to(i, i+1));
     }
 
+    #[allow(unused_variables)]
     fn bishop_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
         // out.push(ChessMove::to(i, i+1));
     }
 
+    #[allow(unused_variables)]
     fn queen_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
         // out.push(ChessMove::to(i, i+1));
     }
 
+    #[allow(unused_variables)]
     fn king_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
         // out.push(ChessMove::to(i, i+1));
     }
@@ -201,6 +206,8 @@ impl ChessGame {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -210,14 +217,14 @@ mod tests {
 
         let game = ChessGame::new();
         assert_eq!(*game.get_board(), [
-            R(White), N(White), B(White), Q(White), K(White), B(White), N(White), R(White),
-            P(White), P(White), P(White), P(White), P(White), P(White), P(White), P(White),
+            R(Wh), N(Wh), B(Wh), Q(Wh), K(Wh), B(Wh), N(Wh), R(Wh),
+            P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh), P(Wh),
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
-            P(Black), P(Black), P(Black), P(Black), P(Black), P(Black), P(Black), P(Black),
-            R(Black), N(Black), B(Black), Q(Black), K(Black), B(Black), N(Black), R(Black),
+            P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl), P(Bl),
+            R(Bl), N(Bl), B(Bl), Q(Bl), K(Bl), B(Bl), N(Bl), R(Bl),
         ]);
     }
 
@@ -228,26 +235,27 @@ mod tests {
 
         let mut game = ChessGame::new();
         game.load_board([
-            None,     None, None,     None, None,     None,     None, None,
-            P(White), None, P(White), None, P(White), P(White), None, None,
-            None,     None, None,     None, P(Black), None,     None, None,
-            P(White), None, None,     None, None,     None,     None, None,
-            None,     None, None,     None, None,     None,     None, None,
-            None,     None, None,     None, None,     None,     None, None,
-            None,     None, P(White), None, None,     None,     None, None,
-            None,     None, None,     None, None,     None,     None, None,
+            None,  None, None,  None, None,  None,  None, None,
+            P(Wh), None, P(Wh), None, P(Wh), P(Wh), None, None,
+            None,  None, None,  None, P(Bl), None,  None, None,
+            P(Wh), None, None,  None, None,  None,  None, None,
+            None,  None, None,  None, None,  None,  None, None,
+            None,  None, None,  None, None,  None,  None, None,
+            None,  None, P(Wh), None, None,  None,  None, None,
+            None,  None, None,  None, None,  None,  None, None,
         ]);
 
         /* Make this not depend on order somehow */
-        assert_eq!(game.find_moves(), vec!(
+        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        assert_eq!(moves, HashSet::from([
             ChessMove::to(8, 16),
             ChessMove::to(10, 18),
             ChessMove::to(10, 26),
             ChessMove::to(13, 21),
             ChessMove::to(13, 29),
-            ChessMove::captures(13, 20),
             ChessMove::to(24, 32),
+            ChessMove::captures(13, 20),
             ChessMove::to(50, 58),
-        ));
+        ]));
     }
 }

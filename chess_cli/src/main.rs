@@ -5,7 +5,7 @@ fn print_board(board: &[ChessPiece; 64]) {
     use ChessColor::*;
 
     fn c(col: &ChessColor) -> String {
-        return if *col == White { String::from("\x1b[34m") }
+        return if *col == Wh { String::from("\x1b[34m") }
                else { String::from("\x1b[31m") };
     }
 
