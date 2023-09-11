@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+
+members = [
+  "chess_cli",
+  "chess",
+]
