@@ -304,9 +304,30 @@ impl ChessGame {
         // out.push(ChessMove::to(i, i+1));
     }
 
-    #[allow(unused_variables)]
     fn king_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
-        // out.push(ChessMove::to(i, i+1));
+        let piece = &self.board[i];
+
+        let targets = [
+            self.step_real(i, 0, 1),
+            self.step_real(i, 1, 1),
+            self.step_real(i, 1, 0),
+            self.step_real(i, 1, -1),
+            self.step_real(i, 0, -1),
+            self.step_real(i, -1, -1),
+            self.step_real(i, -1, 0),
+            self.step_real(i, -1, 1),
+        ];
+
+        for t in targets {
+            match t {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                },
+                _ => (),
+            }
+        }
     }
 
     pub fn find_moves(&self) -> Vec<ChessMove> {
@@ -449,6 +470,37 @@ mod tests {
 
             ChessMove::to(P(Wh), 20, 28),
             ChessMove::captures(P(Wh), 20, 27),
+        ]));
+    }
+
+    #[test]
+    fn king_moves() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None,  None,  None, None, None, None,
+            None, None, None,  None,  None, None, None, None,
+            None, None, None,  P(Wh), None, None, None, None,
+            None, None, B(Bl), K(Wh), None, None, None, None,
+            None, None, None,  None,  None, None, None, None,
+            None, None, None,  None,  None, None, None, None,
+            None, None, None,  None,  None, None, None, None,
+            None, None, None,  None,  None, None, None, None,
+        ]);
+
+        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        assert_eq!(moves, HashSet::from([
+            ChessMove::to(K(Wh), 27, 18),
+            ChessMove::to(K(Wh), 27, 20),
+            ChessMove::to(K(Wh), 27, 28),
+            ChessMove::to(K(Wh), 27, 36),
+            ChessMove::to(K(Wh), 27, 35),
+            ChessMove::to(K(Wh), 27, 34),
+            ChessMove::captures(K(Wh), 27, 26),
+
+            ChessMove::captures(P(Wh), 19, 26),
         ]));
     }
 
