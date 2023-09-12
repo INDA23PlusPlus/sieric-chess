@@ -8,12 +8,16 @@ impl ChessColor {
     fn dir(&self) -> isize {
         return if *self == ChessColor::Wh { 1 } else { -1 };
     }
+
+    fn opposite(&self) -> ChessColor {
+        use ChessColor::*;
+        return if *self == Wh { Bl } else { Wh };
+    }
 }
 
 #[derive(Debug,Clone,Hash,PartialEq,Eq)]
 pub enum ChessPiece {
     None,
-    /* true means white, false means black */
     P(ChessColor), /* pawn */
     R(ChessColor), /* rook */
     N(ChessColor), /* knight */
@@ -109,7 +113,7 @@ impl ChessMove {
 #[derive(Debug)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
-    turn: ChessColor,
+    pub turn: ChessColor,
 }
 
 impl ChessGame {
@@ -137,6 +141,28 @@ impl ChessGame {
 
     pub fn get_board(&self) -> &[ChessPiece; 64] {
         return &self.board;
+    }
+
+    pub fn apply_move(&mut self, mv: &ChessMove) {
+        if mv.piece != self.board[mv.origin] {
+            eprintln!("Illegal move");
+            return;
+        }
+
+        self.board[mv.target] = match &mv.promotes {
+            Some(p) => p.clone(),
+            _ => self.board[mv.origin].clone(),
+        };
+        self.board[mv.origin] = ChessPiece::None;
+
+        if mv.en_passant {
+            self.board[mv.target.wrapping_add_signed(-8*self.turn.dir())]
+                = ChessPiece::None;
+        }
+    }
+
+    pub fn switch_turn(&mut self) {
+        self.turn = self.turn.opposite();
     }
 
     fn step(&self, i: usize, dx: isize, dy: isize) -> Option<usize> {
@@ -168,7 +194,7 @@ impl ChessGame {
 
     fn collides_opponent(&self, i: usize) -> bool {
         return self.board[i] != ChessPiece::None
-            && self.board[i].unwrap() == ChessColor::Bl;
+            && self.board[i].unwrap() == self.turn.opposite();
     }
 
     fn pawn_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
@@ -354,9 +380,9 @@ impl ChessGame {
         }
     }
 
-    #[allow(unused_variables)]
     fn queen_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
-        // out.push(ChessMove::to(i, i+1));
+        self.rook_moves(i, out);
+        self.bishop_moves(i, out);
     }
 
     fn king_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
@@ -560,6 +586,54 @@ mod tests {
             ChessMove::to(B(Wh), 27, 20),
             ChessMove::to(B(Wh), 27, 13),
             ChessMove::to(B(Wh), 27, 6),
+        ]));
+    }
+
+    #[test]
+    fn queen_moves() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None,  None, None, None,  None,  None, None,  None,
+            None,  None, None, None,  None,  None, None,  None,
+            None,  None, None, P(Wh), None,  None, None,  None,
+            None,  None, None, Q(Wh), None,  None, B(Bl), None,
+            None,  None, None, None,  P(Wh), None, None,  None,
+            None,  None, None, None,  None,  None, None,  None,
+            B(Bl), None, None, None,  None,  None, None,  None,
+            None,  None, None, None,  None,  None, None,  None,
+        ]);
+
+        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        assert_eq!(moves, HashSet::from([
+            ChessMove::to(P(Wh), 36, 44),
+
+            ChessMove::to(Q(Wh), 27, 18),
+            ChessMove::to(Q(Wh), 27, 9),
+            ChessMove::to(Q(Wh), 27, 0),
+
+            ChessMove::to(Q(Wh), 27, 34),
+            ChessMove::to(Q(Wh), 27, 41),
+            ChessMove::captures(Q(Wh), 27, 48),
+
+            ChessMove::to(Q(Wh), 27, 20),
+            ChessMove::to(Q(Wh), 27, 13),
+            ChessMove::to(Q(Wh), 27, 6),
+
+            ChessMove::to(Q(Wh), 27, 26),
+            ChessMove::to(Q(Wh), 27, 25),
+            ChessMove::to(Q(Wh), 27, 24),
+
+            ChessMove::to(Q(Wh), 27, 28),
+            ChessMove::to(Q(Wh), 27, 29),
+            ChessMove::captures(Q(Wh), 27, 30),
+
+            ChessMove::to(Q(Wh), 27, 35),
+            ChessMove::to(Q(Wh), 27, 43),
+            ChessMove::to(Q(Wh), 27, 51),
+            ChessMove::to(Q(Wh), 27, 59),
         ]));
     }
 

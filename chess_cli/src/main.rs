@@ -1,6 +1,8 @@
 use chess::*;
+use std::io;
+use itertools::Either;
 
-fn print_board(board: &[ChessPiece; 64]) {
+fn print_board(board: &[ChessPiece; 64], rev: bool) {
     use ChessPiece::*;
     use ChessColor::*;
 
@@ -9,7 +11,12 @@ fn print_board(board: &[ChessPiece; 64]) {
                else { String::from("\x1b[31m") };
     }
 
-    for y in 0..8 {
+    let range = if rev {
+        Either::Right((0..8).rev())
+    } else {
+        Either::Left(0..8)
+    };
+    for y in range {
         print!("{} ", 8-y);
         for x in 0..8 {
             match &board[56-y*8 + x] {
@@ -28,14 +35,27 @@ fn print_board(board: &[ChessPiece; 64]) {
 }
 
 fn dump_moves(moves: &Vec<ChessMove>) {
-    for mv in moves {
-        println!("{}", mv.algebraic());
+    for (i, mv) in moves.iter().enumerate() {
+        println!("{i}: {}", mv.algebraic());
     }
 }
 
 fn main() {
-    let game = ChessGame::new();
+    let mut game = ChessGame::new();
 
-    dump_moves(&game.find_moves());
-    print_board(game.get_board());
+    loop {
+        let moves = game.find_moves();
+        dump_moves(&moves);
+        print_board(game.get_board(), game.turn == ChessColor::Bl);
+        let mut inp = String::new();
+
+        let _ = io::stdin().read_line(&mut inp);
+        match inp.trim().parse::<usize>() {
+            Ok(i) => {
+                game.apply_move(&moves[i]);
+                game.switch_turn();
+            },
+            _ => break,
+        }
+    }
 }
