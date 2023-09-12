@@ -294,9 +294,64 @@ impl ChessGame {
         }
     }
 
-    #[allow(unused_variables)]
     fn bishop_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
-        // out.push(ChessMove::to(i, i+1));
+        let piece = &self.board[i];
+
+        for j in 1..7 {
+            match self.step_real(i, j, j) {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                    break;
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                } else {
+                    break;
+                },
+                _ => break,
+            }
+        }
+
+        for j in 1..7 {
+            match self.step_real(i, -j, j) {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                    break;
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                } else {
+                    break;
+                },
+                _ => break,
+            }
+        }
+
+        for j in 1..7 {
+            match self.step_real(i, j, -j) {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                    break;
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                } else {
+                    break;
+                },
+                _ => break,
+            }
+        }
+
+        for j in 1..7 {
+            match self.step_real(i, -j, -j) {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                    break;
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                } else {
+                    break;
+                },
+                _ => break,
+            }
+        }
     }
 
     #[allow(unused_variables)]
@@ -470,6 +525,41 @@ mod tests {
 
             ChessMove::to(P(Wh), 20, 28),
             ChessMove::captures(P(Wh), 20, 27),
+        ]));
+    }
+
+    #[test]
+    fn bishop_moves() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None,  None, None, None,  None,  None, None, None,
+            None,  None, None, None,  None,  None, None, None,
+            None,  None, None, None,  None,  None, None, None,
+            None,  None, None, B(Wh), None,  None, None, None,
+            None,  None, None, None,  P(Wh), None, None, None,
+            None,  None, None, None,  None,  None, None, None,
+            B(Bl), None, None, None,  None,  None, None, None,
+            None,  None, None, None,  None,  None, None, None,
+        ]);
+
+        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        assert_eq!(moves, HashSet::from([
+            ChessMove::to(P(Wh), 36, 44),
+
+            ChessMove::to(B(Wh), 27, 18),
+            ChessMove::to(B(Wh), 27, 9),
+            ChessMove::to(B(Wh), 27, 0),
+
+            ChessMove::to(B(Wh), 27, 34),
+            ChessMove::to(B(Wh), 27, 41),
+            ChessMove::captures(B(Wh), 27, 48),
+
+            ChessMove::to(B(Wh), 27, 20),
+            ChessMove::to(B(Wh), 27, 13),
+            ChessMove::to(B(Wh), 27, 6),
         ]));
     }
 
