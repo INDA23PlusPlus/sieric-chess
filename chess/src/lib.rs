@@ -63,11 +63,11 @@ impl ChessPiece {
 #[allow(dead_code)]
 pub struct ChessMove {
     piece: ChessPiece,
-    pub origin: usize,
-    pub target: usize,
-    pub captures: bool,
-    pub promotes: Option<ChessPiece>,
-    pub en_passant: bool,
+    origin: usize,
+    target: usize,
+    captures: bool,
+    promotes: Option<ChessPiece>,
+    en_passant: bool,
 }
 
 
@@ -268,9 +268,30 @@ impl ChessGame {
         }
     }
 
-    #[allow(unused_variables)]
     fn knight_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
-        // out.push(ChessMove::to(i, i+1));
+        let piece = &self.board[i];
+
+        let targets = [
+            self.step_real(i, 1, 2),
+            self.step_real(i, -1, 2),
+            self.step_real(i, 1, -2),
+            self.step_real(i, -1, -2),
+            self.step_real(i, 2, 1),
+            self.step_real(i, -2, 1),
+            self.step_real(i, 2, -1),
+            self.step_real(i, -2, -1),
+        ];
+
+        for t in targets {
+            match t {
+                Some(t) => if self.collides_opponent(t) {
+                    out.push(piece.captures(i, t));
+                } else if !self.collides(t) {
+                    out.push(piece.to(i, t));
+                },
+                _ => (),
+            }
+        }
     }
 
     #[allow(unused_variables)]
@@ -398,6 +419,36 @@ mod tests {
             ChessMove::to(R(Wh), 27, 26),
             ChessMove::to(R(Wh), 27, 25),
             ChessMove::to(R(Wh), 27, 24),
+        ]));
+    }
+
+    #[test]
+    fn knight_moves() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None,  None,  None,  None, None, None,
+            None, None, N(Wh), None,  None,  None, None, None,
+            None, None, None,  None,  P(Wh), None, None, None,
+            None, None, None,  B(Bl), None,  None, None, None,
+            None, None, None,  None,  None,  None, None, None,
+            None, None, None,  None,  None,  None, None, None,
+            None, None, None,  None,  None,  None, None, None,
+            None, None, None,  None,  None,  None, None, None,
+        ]);
+
+        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        assert_eq!(moves, HashSet::from([
+            ChessMove::to(N(Wh), 10, 0),
+            ChessMove::to(N(Wh), 10, 4),
+            ChessMove::to(N(Wh), 10, 16),
+            ChessMove::to(N(Wh), 10, 25),
+            ChessMove::captures(N(Wh), 10, 27),
+
+            ChessMove::to(P(Wh), 20, 28),
+            ChessMove::captures(P(Wh), 20, 27),
         ]));
     }
 
