@@ -41,8 +41,6 @@ fn dump_moves(moves: &Vec<ChessMove>) {
 }
 
 fn main() {
-    use ChessPiece::*;
-    use ChessColor::*;
     let mut game = ChessGame::new();
 
     loop {

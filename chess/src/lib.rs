@@ -468,16 +468,23 @@ impl ChessGame {
         return out;
     }
 
+    pub fn is_move_legal(&mut self, side: &ChessColor, mv: &ChessMove) -> bool {
+        self.apply_temp_move(&mv);
+        let result =  self.find_moves(&side.opposite())
+                          .iter().all(|x| x.captures
+                                      != Some(ChessPiece::K(*side)));
+        self.restore_temp_move();
+        return result;
+    }
+
     pub fn find_legal_moves(&mut self, side: &ChessColor) -> Vec<ChessMove> {
+        /* TODO: cache moves per turn? */
         let moves = self.find_moves(side);
         let mut out: Vec<ChessMove> = Vec::new();
         for mv in moves.iter() {
-            self.apply_temp_move(&mv);
-            if self.find_moves(&side.opposite())
-                   .iter().all(|x| x.captures != Some(ChessPiece::K(*side))) {
+            if self.is_move_legal(side, mv) {
                 out.push(*mv);
             }
-            self.restore_temp_move();
         }
 
         return out;
@@ -716,6 +723,54 @@ mod tests {
 
             ChessMove::captures(P(Wh), 19, 26, B(Bl)),
         ]));
+    }
+
+    #[test]
+    fn checkmate() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None,  K(Bl), None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  R(Wh), None, None,
+            None, None, None,  None,  R(Wh), None,  None, None,
+            None, None, R(Wh), None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+        ]);
+        game.apply_move(&ChessMove::to(R(Wh), 21, 19), true);
+        game.switch_turn();
+
+        assert_eq!(game.state, ChessState::Check);
+        let turn = game.turn;
+        assert_eq!(game.find_legal_moves(&turn), Vec::new());
+    }
+
+    #[test]
+    fn stalemate() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None,  K(Bl), None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  R(Wh), None, None,
+            None, None, None,  None,  R(Wh), None,  None, None,
+            None, None, R(Wh), None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+            None, None, None,  None,  None,  None,  None, None,
+        ]);
+        game.apply_move(&ChessMove::to(R(Wh), 21, 13), true);
+        game.switch_turn();
+
+        assert_eq!(game.state, ChessState::Normal);
+        let turn = game.turn;
+        assert_eq!(game.find_legal_moves(&turn), Vec::new());
     }
 
     #[test]
