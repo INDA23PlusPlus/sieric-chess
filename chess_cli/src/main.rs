@@ -41,12 +41,19 @@ fn dump_moves(moves: &Vec<ChessMove>) {
 }
 
 fn main() {
+    use ChessPiece::*;
+    use ChessColor::*;
     let mut game = ChessGame::new();
 
     loop {
         let turn = game.turn;
         let moves = game.find_legal_moves(&turn);
+        if moves.is_empty() {
+            break;
+        }
+
         dump_moves(&moves);
+        println!("State: {:?}", game.state);
         print_board(game.get_board(), game.turn == ChessColor::Bl);
         let mut inp = String::new();
 
@@ -55,10 +62,17 @@ fn main() {
         let _ = io::stdin().read_line(&mut inp);
         match inp.trim().parse::<usize>() {
             Ok(i) => {
-                game.apply_move(&moves[i]);
+                game.apply_move(&moves[i], true);
                 game.switch_turn();
             },
             _ => break,
         }
+    }
+
+    print!("{} ", if game.turn == ChessColor::Wh {"Black"} else {"White"});
+    if game.state == ChessState::Check {
+        println!("checkmate");
+    } else {
+        println!("draw");
     }
 }

@@ -1,3 +1,9 @@
+#[derive(Debug,PartialEq,Eq)]
+pub enum ChessState {
+    Normal,
+    Check,
+}
+
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessColor {
     Wh,
@@ -114,6 +120,7 @@ pub struct ChessGame {
     board: [ChessPiece; 64],
     temp_board: [ChessPiece; 64],
     pub turn: ChessColor,
+    pub state: ChessState,
 }
 
 impl ChessGame {
@@ -132,7 +139,12 @@ impl ChessGame {
             R(Bl), N(Bl), B(Bl), Q(Bl), K(Bl), B(Bl), N(Bl), R(Bl),
         ];
 
-        return ChessGame { board, temp_board: [None; 64], turn: Wh };
+        return ChessGame {
+            board,
+            temp_board: [None; 64],
+            turn: Wh,
+            state: ChessState::Normal
+        };
     }
 
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
@@ -147,7 +159,7 @@ impl ChessGame {
         self.turn = self.turn.opposite();
     }
 
-    pub fn apply_move(&mut self, mv: &ChessMove) {
+    pub fn apply_move(&mut self, mv: &ChessMove, check: bool) {
         if mv.piece != self.board[mv.origin] {
             eprintln!("Illegal move");
             return;
@@ -163,15 +175,25 @@ impl ChessGame {
             self.board[mv.target.wrapping_add_signed(-8*self.turn.dir())]
                 = ChessPiece::None;
         }
+
+        if !check {
+            return;
+        }
+
+        if self.find_moves(&self.turn).iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
+            self.state = ChessState::Check;
+        } else {
+            self.state = ChessState::Normal;
+        }
     }
 
-    pub fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
+    fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
         return ChessMove::captures(self.board[origin], origin, target, self.board[target]);
     }
 
     fn apply_temp_move(&mut self, mv: &ChessMove) {
         self.temp_board = self.board;
-        self.apply_move(mv);
+        self.apply_move(mv, false);
     }
 
     fn restore_temp_move(&mut self) {
