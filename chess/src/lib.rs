@@ -1,4 +1,4 @@
-#[derive(Debug,Hash,PartialEq,Eq,Clone)]
+#[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessColor {
     Wh,
     Bl,
@@ -15,7 +15,7 @@ impl ChessColor {
     }
 }
 
-#[derive(Debug,Clone,Hash,PartialEq,Eq)]
+#[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessPiece {
     None,
     P(ChessColor), /* pawn */
@@ -30,12 +30,12 @@ impl ChessPiece {
     pub fn unwrap(&self) -> ChessColor {
         use ChessPiece::*;
         return match self {
-            P(val) => val.clone(),
-            R(val) => val.clone(),
-            N(val) => val.clone(),
-            B(val) => val.clone(),
-            Q(val) => val.clone(),
-            K(val) => val.clone(),
+            P(val) => *val,
+            R(val) => *val,
+            N(val) => *val,
+            B(val) => *val,
+            Q(val) => *val,
+            K(val) => *val,
             _ => panic!("Trying to unwrap None piece"),
         };
     }
@@ -58,18 +58,17 @@ impl ChessPiece {
         return ChessMove::to(self.clone(), origin, target);
     }
 
-    pub fn captures(&self, origin: usize, target: usize) -> ChessMove {
-        return ChessMove::captures(self.clone(), origin, target);
+    pub fn captures(&self, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
+        return ChessMove::captures(self.clone(), origin, target, captures);
     }
 }
 
-#[derive(Debug,Hash,PartialEq,Eq)]
-#[allow(dead_code)]
+#[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub struct ChessMove {
     piece: ChessPiece,
     origin: usize,
     target: usize,
-    captures: bool,
+    captures: Option<ChessPiece>,
     promotes: Option<ChessPiece>,
     en_passant: bool,
 }
@@ -79,16 +78,16 @@ impl ChessMove {
     pub fn to(piece: ChessPiece, origin: usize, target: usize) -> ChessMove {
         return ChessMove {
             piece, origin, target,
-            captures: false,
+            captures: None,
             promotes: None,
             en_passant: false,
         };
     }
 
-    pub fn captures(piece: ChessPiece, origin: usize, target: usize) -> ChessMove {
+    pub fn captures(piece: ChessPiece, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
         return ChessMove {
             piece, origin, target,
-            captures: true,
+            captures: Some(captures),
             promotes: None,
             en_passant: false,
         };
@@ -100,7 +99,7 @@ impl ChessMove {
         let rank1 = self.origin / 8 + 1;
         let file2 = char::from(97 + (self.target % 8) as u8);
         let rank2 = self.target / 8 + 1;
-        let captures = if self.captures {"x"} else {""};
+        let captures = if self.captures != None {"x"} else {""};
         let ep = if self.en_passant {" e.p."} else {""};
         let promotes = match &self.promotes {
             Some(p) => format!(" ({})", p.str()),
@@ -113,6 +112,7 @@ impl ChessMove {
 #[derive(Debug)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
+    temp_board: [ChessPiece; 64],
     pub turn: ChessColor,
 }
 
@@ -132,7 +132,7 @@ impl ChessGame {
             R(Bl), N(Bl), B(Bl), Q(Bl), K(Bl), B(Bl), N(Bl), R(Bl),
         ];
 
-        return ChessGame { board, turn: Wh };
+        return ChessGame { board, temp_board: [None; 64], turn: Wh };
     }
 
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
@@ -141,6 +141,10 @@ impl ChessGame {
 
     pub fn get_board(&self) -> &[ChessPiece; 64] {
         return &self.board;
+    }
+
+    pub fn switch_turn(&mut self) {
+        self.turn = self.turn.opposite();
     }
 
     pub fn apply_move(&mut self, mv: &ChessMove) {
@@ -161,12 +165,21 @@ impl ChessGame {
         }
     }
 
-    pub fn switch_turn(&mut self) {
-        self.turn = self.turn.opposite();
+    pub fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
+        return ChessMove::captures(self.board[origin], origin, target, self.board[target]);
     }
 
-    fn step(&self, i: usize, dx: isize, dy: isize) -> Option<usize> {
-        let rdy: isize = dy * self.turn.dir();
+    fn apply_temp_move(&mut self, mv: &ChessMove) {
+        self.temp_board = self.board;
+        self.apply_move(mv);
+    }
+
+    fn restore_temp_move(&mut self) {
+        self.board = self.temp_board;
+    }
+
+    fn step(&self, i: usize, dx: isize, dy: isize, side: &ChessColor) -> Option<usize> {
+        let rdy: isize = dy * side.dir();
         let x = (i % 8) as isize + dx;
         let y = (i / 8) as isize + rdy;
 
@@ -192,16 +205,16 @@ impl ChessGame {
         return self.board[i] != ChessPiece::None;
     }
 
-    fn collides_opponent(&self, i: usize) -> bool {
+    fn collides_opponent(&self, i: usize, side: &ChessColor) -> bool {
         return self.board[i] != ChessPiece::None
-            && self.board[i].unwrap() == self.turn.opposite();
+            && self.board[i].unwrap() == side.opposite();
     }
 
-    fn pawn_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
+    fn pawn_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
         /* forward step */
-        let (collides, pos) = match self.step(i, 0, 1) {
+        let (collides, pos) = match self.step(i, 0, 1, side) {
             Some(t) => (self.collides(t), t),
             _ => (true, 0),
         };
@@ -209,7 +222,7 @@ impl ChessGame {
         if !collides {
             out.push(piece.to(i, pos));
             if (i < 16 && i > 7) || (i < 56 && i > 47) {
-                match self.step(i, 0, 2) {
+                match self.step(i, 0, 2, side) {
                     Some(t) => if !self.collides(t) {
                         out.push(piece.to(i, t));
                     },
@@ -219,28 +232,28 @@ impl ChessGame {
         }
 
         /* captures */
-        match self.step(i, 1, 1) {
-            Some(t) => if self.collides_opponent(t) {
-                out.push(piece.captures(i, t));
+        match self.step(i, 1, 1, side) {
+            Some(t) => if self.collides_opponent(t, side) {
+                out.push(self.mv_captures(i, t));
             },
             _ => (),
         }
 
-        match self.step(i, -1, 1) {
-            Some(t) => if self.collides_opponent(t) {
-                out.push(piece.captures(i, t));
+        match self.step(i, -1, 1, side) {
+            Some(t) => if self.collides_opponent(t, side) {
+                out.push(self.mv_captures(i, t));
             },
             _ => (),
         }
     }
 
-    fn rook_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
+    fn rook_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
         for j in 1..7 {
             match self.step_real(i, 0, j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -253,8 +266,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, j, 0) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -267,8 +280,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, 0, -j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -281,8 +294,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, -j, 0) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -294,7 +307,7 @@ impl ChessGame {
         }
     }
 
-    fn knight_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
+    fn knight_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
         let targets = [
@@ -310,8 +323,8 @@ impl ChessGame {
 
         for t in targets {
             match t {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
                 },
@@ -320,13 +333,13 @@ impl ChessGame {
         }
     }
 
-    fn bishop_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
+    fn bishop_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
         for j in 1..7 {
             match self.step_real(i, j, j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -339,8 +352,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, -j, j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -353,8 +366,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, j, -j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -367,8 +380,8 @@ impl ChessGame {
 
         for j in 1..7 {
             match self.step_real(i, -j, -j) {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                     break;
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
@@ -380,12 +393,12 @@ impl ChessGame {
         }
     }
 
-    fn queen_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
-        self.rook_moves(i, out);
-        self.bishop_moves(i, out);
+    fn queen_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
+        self.rook_moves(i, out, side);
+        self.bishop_moves(i, out, side);
     }
 
-    fn king_moves(&self, i: usize, out: &mut Vec<ChessMove>) {
+    fn king_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
         let targets = [
@@ -401,8 +414,8 @@ impl ChessGame {
 
         for t in targets {
             match t {
-                Some(t) => if self.collides_opponent(t) {
-                    out.push(piece.captures(i, t));
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.push(self.mv_captures(i, t));
                 } else if !self.collides(t) {
                     out.push(piece.to(i, t));
                 },
@@ -411,23 +424,38 @@ impl ChessGame {
         }
     }
 
-    pub fn find_moves(&self) -> Vec<ChessMove> {
+    pub fn find_moves(&self, side: &ChessColor) -> Vec<ChessMove> {
         use ChessPiece::*;
         let mut out: Vec<ChessMove> = Vec::new();
         let it = self.board.iter()
                            .enumerate()
                            .filter(|(_, x)| **x != None
-                                   && x.unwrap() == self.turn);
+                                   && x.unwrap() == *side);
         for (i, piece) in it {
             match piece {
-                P(_) => self.pawn_moves(i, &mut out),
-                R(_) => self.rook_moves(i, &mut out),
-                N(_) => self.knight_moves(i, &mut out),
-                B(_) => self.bishop_moves(i, &mut out),
-                Q(_) => self.queen_moves(i, &mut out),
-                K(_) => self.king_moves(i, &mut out),
+                P(_) => self.pawn_moves(i, &mut out, side),
+                R(_) => self.rook_moves(i, &mut out, side),
+                N(_) => self.knight_moves(i, &mut out, side),
+                B(_) => self.bishop_moves(i, &mut out, side),
+                Q(_) => self.queen_moves(i, &mut out, side),
+                K(_) => self.king_moves(i, &mut out, side),
                 _ => unreachable!(),
             };
+        }
+
+        return out;
+    }
+
+    pub fn find_legal_moves(&mut self, side: &ChessColor) -> Vec<ChessMove> {
+        let moves = self.find_moves(side);
+        let mut out: Vec<ChessMove> = Vec::new();
+        for mv in moves.iter() {
+            self.apply_temp_move(&mv);
+            if self.find_moves(&side.opposite())
+                   .iter().all(|x| x.captures != Some(ChessPiece::K(*side))) {
+                out.push(*mv);
+            }
+            self.restore_temp_move();
         }
 
         return out;
@@ -476,7 +504,7 @@ mod tests {
         ]);
 
         /* Make this not depend on order somehow */
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 8, 16),
             ChessMove::to(P(Wh), 10, 18),
@@ -484,7 +512,7 @@ mod tests {
             ChessMove::to(P(Wh), 13, 21),
             ChessMove::to(P(Wh), 13, 29),
             ChessMove::to(P(Wh), 24, 32),
-            ChessMove::captures(P(Wh), 13, 20),
+            ChessMove::captures(P(Wh), 13, 20, P(Bl)),
             ChessMove::to(P(Wh), 50, 58),
         ]));
     }
@@ -506,7 +534,7 @@ mod tests {
             None, None, None, None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 28, 36),
 
@@ -516,7 +544,7 @@ mod tests {
 
             ChessMove::to(R(Wh), 27, 35),
             ChessMove::to(R(Wh), 27, 43),
-            ChessMove::captures(R(Wh), 27, 51),
+            ChessMove::captures(R(Wh), 27, 51, B(Bl)),
 
             ChessMove::to(R(Wh), 27, 26),
             ChessMove::to(R(Wh), 27, 25),
@@ -541,16 +569,16 @@ mod tests {
             None, None, None,  None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(N(Wh), 10, 0),
             ChessMove::to(N(Wh), 10, 4),
             ChessMove::to(N(Wh), 10, 16),
             ChessMove::to(N(Wh), 10, 25),
-            ChessMove::captures(N(Wh), 10, 27),
+            ChessMove::captures(N(Wh), 10, 27, B(Bl)),
 
             ChessMove::to(P(Wh), 20, 28),
-            ChessMove::captures(P(Wh), 20, 27),
+            ChessMove::captures(P(Wh), 20, 27, B(Bl)),
         ]));
     }
 
@@ -571,7 +599,7 @@ mod tests {
             None,  None, None, None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 36, 44),
 
@@ -581,7 +609,7 @@ mod tests {
 
             ChessMove::to(B(Wh), 27, 34),
             ChessMove::to(B(Wh), 27, 41),
-            ChessMove::captures(B(Wh), 27, 48),
+            ChessMove::captures(B(Wh), 27, 48, B(Bl)),
 
             ChessMove::to(B(Wh), 27, 20),
             ChessMove::to(B(Wh), 27, 13),
@@ -606,7 +634,7 @@ mod tests {
             None,  None, None, None,  None,  None, None,  None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 36, 44),
 
@@ -616,7 +644,7 @@ mod tests {
 
             ChessMove::to(Q(Wh), 27, 34),
             ChessMove::to(Q(Wh), 27, 41),
-            ChessMove::captures(Q(Wh), 27, 48),
+            ChessMove::captures(Q(Wh), 27, 48, B(Bl)),
 
             ChessMove::to(Q(Wh), 27, 20),
             ChessMove::to(Q(Wh), 27, 13),
@@ -628,7 +656,7 @@ mod tests {
 
             ChessMove::to(Q(Wh), 27, 28),
             ChessMove::to(Q(Wh), 27, 29),
-            ChessMove::captures(Q(Wh), 27, 30),
+            ChessMove::captures(Q(Wh), 27, 30, B(Bl)),
 
             ChessMove::to(Q(Wh), 27, 35),
             ChessMove::to(Q(Wh), 27, 43),
@@ -654,7 +682,7 @@ mod tests {
             None, None, None,  None,  None, None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves().into_iter().collect();
+        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(K(Wh), 27, 18),
             ChessMove::to(K(Wh), 27, 20),
@@ -662,9 +690,9 @@ mod tests {
             ChessMove::to(K(Wh), 27, 36),
             ChessMove::to(K(Wh), 27, 35),
             ChessMove::to(K(Wh), 27, 34),
-            ChessMove::captures(K(Wh), 27, 26),
+            ChessMove::captures(K(Wh), 27, 26, B(Bl)),
 
-            ChessMove::captures(P(Wh), 19, 26),
+            ChessMove::captures(P(Wh), 19, 26, B(Bl)),
         ]));
     }
 
@@ -674,12 +702,12 @@ mod tests {
         use ChessColor::*;
 
         assert_eq!(ChessMove::to(P(Wh), 4, 12).algebraic(), "e1e2");
-        assert_eq!(ChessMove::captures(P(Wh), 4, 11).algebraic(), "e1xd2");
+        assert_eq!(ChessMove::captures(P(Wh), 4, 11, P(Bl)).algebraic(), "e1xd2");
         assert_eq!(ChessMove::to(R(Wh), 7, 23).algebraic(), "Rh1h3");
         let mut m1 = ChessMove::to(P(Wh), 55, 63);
         m1.promotes = Some(Q(Wh));
         assert_eq!(m1.algebraic(), "h7h8 (Q)");
-        let mut m2 = ChessMove::captures(P(Wh), 32, 41);
+        let mut m2 = ChessMove::captures(P(Wh), 32, 41, P(Bl));
         m2.en_passant = true;
         assert_eq!(m2.algebraic(), "a5xb6 e.p.");
         m2.promotes = Some(B(Wh));

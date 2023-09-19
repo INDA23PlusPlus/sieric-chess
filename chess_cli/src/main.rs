@@ -1,5 +1,5 @@
 use chess::*;
-use std::io;
+use std::io::{self, Write};
 use itertools::Either;
 
 fn print_board(board: &[ChessPiece; 64], rev: bool) {
@@ -44,11 +44,14 @@ fn main() {
     let mut game = ChessGame::new();
 
     loop {
-        let moves = game.find_moves();
+        let turn = game.turn;
+        let moves = game.find_legal_moves(&turn);
         dump_moves(&moves);
         print_board(game.get_board(), game.turn == ChessColor::Bl);
         let mut inp = String::new();
 
+        print!("Move: ");
+        io::stdout().flush().expect("Could not flush stdout");
         let _ = io::stdin().read_line(&mut inp);
         match inp.trim().parse::<usize>() {
             Ok(i) => {
