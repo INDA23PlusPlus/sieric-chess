@@ -44,8 +44,7 @@ fn main() {
     let mut game = ChessGame::new();
 
     loop {
-        let turn = game.turn;
-        let moves = game.find_legal_moves(&turn);
+        let moves = game.get_legal_moves(&game.turn);
         if moves.is_empty() {
             break;
         }

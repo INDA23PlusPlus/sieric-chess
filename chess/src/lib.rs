@@ -128,11 +128,16 @@ impl ChessMove {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
     temp_board: [ChessPiece; 64],
-    can_castle: [bool; 2],
+    can_castle_k: [bool; 2],
+    can_castle_q: [bool; 2],
+    can_castle_now_k: [bool; 2],
+    can_castle_now_q: [bool; 2],
     en_passant_loc: [Option<(usize, usize)>; 2],
+    next_moves: [Vec<ChessMove>; 2],
     pub turn: ChessColor,
     pub state: ChessState,
 }
@@ -153,18 +158,28 @@ impl ChessGame {
             R(Bl), N(Bl), B(Bl), Q(Bl), K(Bl), B(Bl), N(Bl), R(Bl),
         ];
 
-        return ChessGame {
+        let mut game = ChessGame {
             board,
             temp_board: [None; 64],
-            can_castle: [true; 2],
+            can_castle_k: [true; 2],
+            can_castle_q: [true; 2],
+            can_castle_now_k: [false; 2],
+            can_castle_now_q: [false; 2],
             en_passant_loc: [Option::None; 2],
+            next_moves: [Vec::new(), Vec::new()],
             turn: Wh,
             state: ChessState::Normal
         };
+        /* HACK: calculate initial game state by doing nothing */
+        game.apply_move(&ChessMove::to(None, 16, 16), true);
+
+        return game;
     }
 
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
         self.board = board;
+        /* HACK: calculate game state by doing nothing */
+        self.apply_move(&ChessMove::to(ChessPiece::None, 16, 16), true);
     }
 
     pub fn get_board(&self) -> &[ChessPiece; 64] {
@@ -219,13 +234,29 @@ impl ChessGame {
 
         /* check castle eligibility */
         match mv.piece {
-            ChessPiece::K(side) => self.can_castle[side as usize] = false,
+            ChessPiece::K(side) => {
+                self.can_castle_k[side as usize] = false;
+                self.can_castle_q[side as usize] = false;
+            },
+            ChessPiece::R(side) => {
+                if mv.origin == 0 || mv.origin == 56 {
+                    self.can_castle_q[side as usize] = false;
+                } else if mv.origin == 7 || mv.origin == 63 {
+                    self.can_castle_k[side as usize] = false;
+                }
+            }
             _ => (),
         }
 
+        /* update possible moves for next turn */
+        self.next_moves[ChessColor::Wh as usize]
+            = self.find_legal_moves(&ChessColor::Wh);
+        self.next_moves[ChessColor::Bl as usize]
+            = self.find_legal_moves(&ChessColor::Bl);
+
         /* TODO: place in move generation and save as "next state?"
          * Would be useful for algebraic notation. */
-        if self.find_moves(&self.turn).iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
+        if self.next_moves[self.turn as usize].iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
             self.state = ChessState::Check;
         } else {
             self.state = ChessState::Normal;
@@ -513,7 +544,7 @@ impl ChessGame {
         }
     }
 
-    pub fn find_moves(&self, side: &ChessColor) -> Vec<ChessMove> {
+    fn find_moves(&self, side: &ChessColor) -> Vec<ChessMove> {
         use ChessPiece::*;
         let mut out: Vec<ChessMove> = Vec::new();
         let it = self.board.iter()
@@ -537,15 +568,14 @@ impl ChessGame {
 
     pub fn is_move_legal(&mut self, side: &ChessColor, mv: &ChessMove) -> bool {
         self.apply_temp_move(&mv);
-        let result =  self.find_moves(&side.opposite())
-                          .iter().all(|x| x.captures
-                                      != Some(ChessPiece::K(*side)));
+        let result = self.find_moves(&side.opposite())
+                         .iter().all(|x| x.captures
+                                     != Some(ChessPiece::K(*side)));
         self.restore_temp_move();
         return result;
     }
 
-    pub fn find_legal_moves(&mut self, side: &ChessColor) -> Vec<ChessMove> {
-        /* TODO: cache moves per turn? */
+    fn find_legal_moves(&mut self, side: &ChessColor) -> Vec<ChessMove> {
         let moves = self.find_moves(side);
         let mut out: Vec<ChessMove> = Vec::new();
         for mv in moves.iter() {
@@ -555,6 +585,12 @@ impl ChessGame {
         }
 
         return out;
+    }
+
+    pub fn get_legal_moves(&self, side: &ChessColor) -> Vec<ChessMove> {
+        /* I hate the fact that I have to clone here becase the borrow checker
+         * got angry with me */
+        return self.next_moves[*side as usize].clone();
     }
 }
 
@@ -600,7 +636,7 @@ mod tests {
         ]);
 
         /* Make this not depend on order somehow */
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 8, 16),
             ChessMove::to(P(Wh), 10, 18),
@@ -630,7 +666,7 @@ mod tests {
             None, None, None, None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 28, 36),
 
@@ -665,7 +701,7 @@ mod tests {
             None, None, None,  None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(N(Wh), 10, 0),
             ChessMove::to(N(Wh), 10, 4),
@@ -695,7 +731,7 @@ mod tests {
             None,  None, None, None,  None,  None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 36, 44),
 
@@ -730,7 +766,7 @@ mod tests {
             None,  None, None, None,  None,  None, None,  None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(P(Wh), 36, 44),
 
@@ -778,13 +814,12 @@ mod tests {
             None, None, None,  None,  None, None, None, None,
         ]);
 
-        let moves: HashSet<ChessMove> = game.find_moves(&game.turn).into_iter().collect();
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
         assert_eq!(moves, HashSet::from([
             ChessMove::to(K(Wh), 27, 18),
             ChessMove::to(K(Wh), 27, 20),
             ChessMove::to(K(Wh), 27, 28),
             ChessMove::to(K(Wh), 27, 36),
-            ChessMove::to(K(Wh), 27, 35),
             ChessMove::to(K(Wh), 27, 34),
             ChessMove::captures(K(Wh), 27, 26, B(Bl)),
 
@@ -813,7 +848,7 @@ mod tests {
 
         assert_eq!(game.state, ChessState::Check);
         let turn = game.turn;
-        assert_eq!(game.find_legal_moves(&turn), Vec::new());
+        assert_eq!(game.get_legal_moves(&turn), Vec::new());
     }
 
     #[test]
@@ -837,7 +872,7 @@ mod tests {
 
         assert_eq!(game.state, ChessState::Normal);
         let turn = game.turn;
-        assert_eq!(game.find_legal_moves(&turn), Vec::new());
+        assert_eq!(game.get_legal_moves(&turn), Vec::new());
     }
 
     #[test]
@@ -856,14 +891,20 @@ mod tests {
             None,  None,  None, None,  None,  None,  None, None,
             None,  None,  None, None,  None,  None,  None, None,
         ]);
-        game.apply_move(&ChessMove::to(P(Wh), 8, 24), true);
-        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(25, 16)));
+        {
+            game.apply_move(&ChessMove::to(P(Wh), 8, 24), true);
+            let moves = game.get_legal_moves(&Bl);
+            assert!(moves.contains(&game.mv_en_passant(25, 16)));
+        }
 
-        game.apply_move(&ChessMove::to(P(Wh), 12, 28), true);
-        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(27, 20)));
-        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(29, 20)));
+        {
+            game.apply_move(&ChessMove::to(P(Wh), 12, 28), true);
+            let moves = game.get_legal_moves(&Bl);
+            assert!(moves.contains(&game.mv_en_passant(27, 20)));
+            assert!(moves.contains(&game.mv_en_passant(29, 20)));
 
-        assert!(!game.find_legal_moves(&Bl).contains(&game.mv_en_passant(25, 16)));
+            assert!(!moves.contains(&game.mv_en_passant(25, 16)));
+        }
     }
 
     #[test]
