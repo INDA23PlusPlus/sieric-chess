@@ -33,17 +33,24 @@ pub enum ChessPiece {
 }
 
 impl ChessPiece {
-    pub fn unwrap(&self) -> ChessColor {
+    pub fn color(&self) -> Option<ChessColor> {
         use ChessPiece::*;
         return match self {
-            P(val) => *val,
-            R(val) => *val,
-            N(val) => *val,
-            B(val) => *val,
-            Q(val) => *val,
-            K(val) => *val,
-            _ => panic!("Trying to unwrap None piece"),
+            P(val) => Some(*val),
+            R(val) => Some(*val),
+            N(val) => Some(*val),
+            B(val) => Some(*val),
+            Q(val) => Some(*val),
+            K(val) => Some(*val),
+            _ => Option::None,
         };
+    }
+
+    pub fn unwrap(&self) -> ChessColor {
+        match self.color() {
+            Some(val) => val,
+            _ => panic!("Trying to unwrap None piece"),
+        }
     }
 
     pub fn str(&self) -> String {
@@ -113,10 +120,10 @@ impl ChessMove {
         let captures = if self.captures != None {"x"} else {""};
         let ep = if self.en_passant {" e.p."} else {""};
         let promotes = match &self.promotes {
-            Some(p) => format!(" ({})", p.str()),
+            Some(p) => format!("({})", p.str()),
             None => String::from(""),
         };
-        return format!("{piece}{file1}{rank1}{captures}{file2}{rank2}{ep}{promotes}");
+        return format!("{piece}{file1}{rank1}{captures}{file2}{rank2}{promotes}{ep}");
     }
 }
 
@@ -216,6 +223,8 @@ impl ChessGame {
             _ => (),
         }
 
+        /* TODO: place in move generation and save as "next state?"
+         * Would be useful for algebraic notation. */
         if self.find_moves(&self.turn).iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
             self.state = ChessState::Check;
         } else {
@@ -225,6 +234,18 @@ impl ChessGame {
 
     fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
         return ChessMove::captures(self.board[origin], origin, target, self.board[target]);
+    }
+
+    fn mv_en_passant(&self, origin: usize, target: usize) -> ChessMove {
+        let piece = self.board[origin];
+        let mut mv = ChessMove::to(piece, origin, target);
+        mv.captures = match piece.color() {
+            Some(col) => Some(ChessPiece::P(col.opposite())),
+            _ => None,
+        };
+        mv.en_passant = true;
+
+        return mv;
     }
 
     fn apply_temp_move(&mut self, mv: &ChessMove) {
@@ -302,6 +323,16 @@ impl ChessGame {
                 out.push(self.mv_captures(i, t));
             },
             _ => (),
+        }
+
+        /* en passant */
+        for loc in self.en_passant_loc {
+            match loc {
+                Some((origin, target)) => if i == origin {
+                    out.push(self.mv_en_passant(origin, target))
+                },
+                _ => (),
+            }
         }
     }
 
@@ -810,6 +841,32 @@ mod tests {
     }
 
     #[test]
+    fn en_passant() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None,  None,  None, None,  None,  None,  None, None,
+            P(Wh), None,  None, None,  P(Wh), None,  None, None,
+            None,  None,  None, None,  None,  None,  None, None,
+            None,  P(Bl), None, P(Bl), None,  P(Bl), None, None,
+            None,  None,  None, None,  None,  None,  None, None,
+            None,  None,  None, None,  None,  None,  None, None,
+            None,  None,  None, None,  None,  None,  None, None,
+            None,  None,  None, None,  None,  None,  None, None,
+        ]);
+        game.apply_move(&ChessMove::to(P(Wh), 8, 24), true);
+        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(25, 16)));
+
+        game.apply_move(&ChessMove::to(P(Wh), 12, 28), true);
+        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(27, 20)));
+        assert!(game.find_legal_moves(&Bl).contains(&game.mv_en_passant(29, 20)));
+
+        assert!(!game.find_legal_moves(&Bl).contains(&game.mv_en_passant(25, 16)));
+    }
+
+    #[test]
     fn algebraic() {
         use ChessPiece::*;
         use ChessColor::*;
@@ -819,11 +876,12 @@ mod tests {
         assert_eq!(ChessMove::to(R(Wh), 7, 23).algebraic(), "Rh1h3");
         let mut m1 = ChessMove::to(P(Wh), 55, 63);
         m1.promotes = Some(Q(Wh));
-        assert_eq!(m1.algebraic(), "h7h8 (Q)");
+        assert_eq!(m1.algebraic(), "h7h8(Q)");
         let mut m2 = ChessMove::captures(P(Wh), 32, 41, P(Bl));
         m2.en_passant = true;
         assert_eq!(m2.algebraic(), "a5xb6 e.p.");
+        m2.en_passant = false;
         m2.promotes = Some(B(Wh));
-        assert_eq!(m2.algebraic(), "a5xb6 e.p. (B)");
+        assert_eq!(m2.algebraic(), "a5xb6(B)");
     }
 }
