@@ -101,15 +101,15 @@ impl ChessPiece {
  */
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub struct ChessMove {
-    piece: ChessPiece,
-    origin: usize,
-    target: usize,
-    captures: Option<ChessPiece>,
-    promotes: Option<ChessPiece>,
+    pub piece: ChessPiece,
+    pub origin: usize,
+    pub target: usize,
+    pub captures: Option<ChessPiece>,
+    pub promotes: Option<ChessPiece>,
 
     /* these could really be one enum but whatever */
-    en_passant: bool,
-    castles: bool,
+    pub en_passant: bool,
+    pub castles: bool,
 }
 
 
