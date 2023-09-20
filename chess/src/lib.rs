@@ -128,7 +128,6 @@ impl ChessMove {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
     temp_board: [ChessPiece; 64],
@@ -249,6 +248,46 @@ impl ChessGame {
         }
 
         /* update possible moves for next turn */
+        self.next_moves[ChessColor::Wh as usize]
+            = self.find_legal_moves(&ChessColor::Wh);
+        self.next_moves[ChessColor::Bl as usize]
+            = self.find_legal_moves(&ChessColor::Bl);
+
+        /* check caste eligibility for next turn */
+        self.can_castle_now_q[ChessColor::Wh as usize]
+            = self.board[1] == ChessPiece::None
+            && self.board[2] == ChessPiece::None
+            && self.board[3] == ChessPiece::None;
+        self.can_castle_now_k[ChessColor::Wh as usize]
+            = self.board[5] == ChessPiece::None
+            && self.board[6] == ChessPiece::None;
+        self.can_castle_now_q[ChessColor::Bl as usize]
+            = self.board[57] == ChessPiece::None
+            && self.board[58] == ChessPiece::None
+            && self.board[59] == ChessPiece::None;
+        self.can_castle_now_k[ChessColor::Bl as usize]
+            = self.board[61] == ChessPiece::None
+            && self.board[62] == ChessPiece::None;
+
+        for mv in self.next_moves[ChessColor::Wh as usize].iter() {
+            if mv.target == 58 || mv.target == 59 || mv.target == 60 {
+                self.can_castle_now_q[ChessColor::Bl as usize] = false;
+            }
+            if mv.target == 60 || mv.target == 61 || mv.target == 62 {
+                self.can_castle_now_k[ChessColor::Bl as usize] = false;
+            }
+        }
+        for mv in self.next_moves[ChessColor::Bl as usize].iter() {
+            if mv.target == 2 || mv.target == 3 || mv.target == 4 {
+                self.can_castle_now_q[ChessColor::Wh as usize] = false;
+            }
+            if mv.target == 4 || mv.target == 5 || mv.target == 6 {
+                self.can_castle_now_k[ChessColor::Wh as usize] = false;
+            }
+        }
+
+        /* update possible moves again since
+         * castle eligibility may have changed */
         self.next_moves[ChessColor::Wh as usize]
             = self.find_legal_moves(&ChessColor::Wh);
         self.next_moves[ChessColor::Bl as usize]
