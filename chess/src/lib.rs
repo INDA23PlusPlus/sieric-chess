@@ -112,6 +112,14 @@ impl ChessMove {
     }
 
     pub fn algebraic(&self) -> String {
+        if self.castles {
+            return String::from(if self.target as isize - self.origin as isize == -2 {
+                "O-O-O"
+            } else {
+                "O-O"
+            });
+        }
+
         let piece = self.piece.str();
         let file1 = char::from(97 + (self.origin % 8) as u8);
         let rank1 = self.origin / 8 + 1;
@@ -177,8 +185,32 @@ impl ChessGame {
 
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
         self.board = board;
+
+        /* disable castling after loading arbitrary boards */
+        self.can_castle_k = [false; 2];
+        self.can_castle_q = [false; 2];
+
         /* HACK: calculate game state by doing nothing */
         self.apply_move(&ChessMove::to(ChessPiece::None, 16, 16), true);
+    }
+
+    pub fn set_castle_eligibility(&mut self, side: &ChessColor, queens: bool, state: bool) {
+        if queens {
+            self.can_castle_q[*side as usize] = state;
+        } else {
+            self.can_castle_k[*side as usize] = state;
+        }
+
+        /* HACK: update game state by doing nothing */
+        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0), true);
+    }
+
+    pub fn set_all_castle_eligibility(&mut self, kings: [bool; 2], queens: [bool; 2]) {
+        self.can_castle_q = queens;
+        self.can_castle_k = kings;
+
+        /* HACK: update game state by doing nothing */
+        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0), true);
     }
 
     pub fn get_board(&self) -> &[ChessPiece; 64] {
@@ -190,20 +222,31 @@ impl ChessGame {
     }
 
     pub fn apply_move(&mut self, mv: &ChessMove, real: bool) {
-        if mv.piece != self.board[mv.origin] {
-            eprintln!("Illegal move");
-            return;
-        }
+        /* HACK: Allow moves of None to update game state */
+        if mv.piece != ChessPiece::None {
+            if mv.piece != self.board[mv.origin] {
+                eprintln!("Illegal move");
+                return;
+            }
 
-        self.board[mv.target] = match &mv.promotes {
-            Some(p) => p.clone(),
-            _ => self.board[mv.origin].clone(),
-        };
-        self.board[mv.origin] = ChessPiece::None;
+            self.board[mv.target] = match &mv.promotes {
+                Some(p) => p.clone(),
+                _ => self.board[mv.origin].clone(),
+            };
+            self.board[mv.origin] = ChessPiece::None;
 
-        if mv.en_passant {
-            self.board[mv.target.wrapping_add_signed(-8*self.turn.dir())]
-                = ChessPiece::None;
+            if mv.en_passant {
+                self.board[mv.target.wrapping_add_signed(-8*self.turn.dir())]
+                    = ChessPiece::None;
+            }
+
+            if mv.castles {
+                let queens = mv.target as isize - mv.origin as isize == -2;
+                let rook_origin = mv.origin.wrapping_add_signed(if queens {-4} else {3});
+                let rook_target = (mv.target + mv.origin)/2;
+                self.board[rook_target] = self.board[rook_origin];
+                self.board[rook_origin] = ChessPiece::None;
+            }
         }
 
         /* ignore lasting effects of non-real moves
@@ -315,6 +358,16 @@ impl ChessGame {
         };
         mv.en_passant = true;
 
+        return mv;
+    }
+
+    fn mv_castle(&self, side: &ChessColor, queens: bool) -> ChessMove {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let king = if *side == Wh {4} else {56};
+        let mut mv = ChessMove::to(K(*side), king, if queens {king - 2} else {king + 2});
+        mv.castles = true;
         return mv;
     }
 
@@ -600,6 +653,13 @@ impl ChessGame {
                 K(_) => self.king_moves(i, &mut out, side),
                 _ => unreachable!(),
             };
+        }
+
+        if self.can_castle_k[*side as usize] && self.can_castle_now_k[*side as usize] {
+            out.push(self.mv_castle(side, false));
+        }
+        if self.can_castle_q[*side as usize] && self.can_castle_now_q[*side as usize] {
+            out.push(self.mv_castle(side, true));
         }
 
         return out;
@@ -944,6 +1004,98 @@ mod tests {
 
             assert!(!moves.contains(&game.mv_en_passant(25, 16)));
         }
+    }
+
+    #[test]
+    fn castling_1() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            R(Wh), N(Wh), None, None, K(Wh), None, None, R(Wh),
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, K(Bl), None, None, None,
+        ]);
+        game.set_all_castle_eligibility([true; 2], [true; 2]);
+
+        let moves = game.get_legal_moves(&Wh);
+        assert!(moves.contains(&game.mv_castle(&Wh, false)));
+        assert!(!moves.contains(&game.mv_castle(&Wh, true)));
+    }
+
+    #[test]
+    fn castling_2() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            R(Wh), None, None, None, K(Wh), None, None, R(Wh),
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, Q(Bl), None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, K(Bl), None, None, None,
+        ]);
+        game.set_all_castle_eligibility([true; 2], [true; 2]);
+
+        let moves = game.get_legal_moves(&Wh);
+        assert!(moves.contains(&game.mv_castle(&Wh, false)));
+        assert!(!moves.contains(&game.mv_castle(&Wh, true)));
+    }
+
+    #[test]
+    fn castling_3() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None, None, K(Wh), None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, Q(Wh), None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            R(Bl), None, None, None, K(Bl), None, None, R(Bl),
+        ]);
+        game.set_all_castle_eligibility([true; 2], [true; 2]);
+
+        let moves = game.get_legal_moves(&Bl);
+        assert!(!moves.contains(&game.mv_castle(&Bl, false)));
+        assert!(!moves.contains(&game.mv_castle(&Bl, true)));
+    }
+
+    #[test]
+    fn castling_4() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None, None, K(Wh), None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, Q(Wh), None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            R(Bl), None, None, None, K(Bl), None, None, R(Bl),
+        ]);
+        game.set_all_castle_eligibility([true; 2], [true; 2]);
+
+        let moves = game.get_legal_moves(&Bl);
+        assert!(!moves.contains(&game.mv_castle(&Bl, false)));
+        assert!(moves.contains(&game.mv_castle(&Bl, true)));
     }
 
     #[test]
