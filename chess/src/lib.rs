@@ -6,7 +6,7 @@ pub enum ChessState {
 
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessColor {
-    Wh,
+    Wh = 0,
     Bl,
 }
 
@@ -76,7 +76,10 @@ pub struct ChessMove {
     target: usize,
     captures: Option<ChessPiece>,
     promotes: Option<ChessPiece>,
+
+    /* these could really be one enum but whatever */
     en_passant: bool,
+    castles: bool,
 }
 
 
@@ -87,6 +90,7 @@ impl ChessMove {
             captures: None,
             promotes: None,
             en_passant: false,
+            castles: false,
         };
     }
 
@@ -96,6 +100,7 @@ impl ChessMove {
             captures: Some(captures),
             promotes: None,
             en_passant: false,
+            castles: false,
         };
     }
 
@@ -119,6 +124,8 @@ impl ChessMove {
 pub struct ChessGame {
     board: [ChessPiece; 64],
     temp_board: [ChessPiece; 64],
+    can_castle: [bool; 2],
+    en_passant_loc: [Option<(usize, usize)>; 2],
     pub turn: ChessColor,
     pub state: ChessState,
 }
@@ -142,6 +149,8 @@ impl ChessGame {
         return ChessGame {
             board,
             temp_board: [None; 64],
+            can_castle: [true; 2],
+            en_passant_loc: [Option::None; 2],
             turn: Wh,
             state: ChessState::Normal
         };
@@ -159,7 +168,7 @@ impl ChessGame {
         self.turn = self.turn.opposite();
     }
 
-    pub fn apply_move(&mut self, mv: &ChessMove, check: bool) {
+    pub fn apply_move(&mut self, mv: &ChessMove, real: bool) {
         if mv.piece != self.board[mv.origin] {
             eprintln!("Illegal move");
             return;
@@ -176,8 +185,35 @@ impl ChessGame {
                 = ChessPiece::None;
         }
 
-        if !check {
+        /* ignore lasting effects of non-real moves
+         * eg. calls from `apply_temp_move` */
+        if !real {
             return;
+        }
+
+        /* check which squares can en passant next turn */
+        let en_passant_target = (mv.origin + mv.target) / 2;
+        /* jank way to check for pawn */
+        if mv.piece.str() == "" &&
+            (mv.origin as isize - mv.target as isize).abs() == 16 {
+            match self.step_real(mv.target, 1, 0) {
+                Some(loc) => self.en_passant_loc[0]
+                    = Some((loc, en_passant_target)),
+                _ => self.en_passant_loc[0] = None,
+            }
+            match self.step_real(mv.target, -1, 0) {
+                Some(loc) => self.en_passant_loc[1]
+                    = Some((loc, en_passant_target)),
+                _ => self.en_passant_loc[1] = None,
+            }
+        } else {
+            self.en_passant_loc = [None; 2];
+        }
+
+        /* check castle eligibility */
+        match mv.piece {
+            ChessPiece::K(side) => self.can_castle[side as usize] = false,
+            _ => (),
         }
 
         if self.find_moves(&self.turn).iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
