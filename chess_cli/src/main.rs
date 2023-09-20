@@ -57,10 +57,12 @@ fn main() {
         /* get all legal moves in a Vec */
         let moves = game.get_legal_moves(&game.turn);
 
-        /* print moves, the game state, and the board
+        /* print moves, the check state, and the board
          * (reversed on blacks turn) */
         dump_moves(&moves);
-        println!("State: {:?}", game.state);
+        if game.is_check() {
+            println!("In check!");
+        }
         print_board(game.get_board(), game.turn == ChessColor::Bl);
 
         /* take input from the user (index into the moves Vec) */

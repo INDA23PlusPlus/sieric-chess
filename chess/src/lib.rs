@@ -1,8 +1,5 @@
-/**
- * State of a [ChessGame].
- */
 #[derive(Debug,PartialEq,Eq)]
-pub enum ChessState {
+enum ChessState {
     Normal,
     Check,
 }
@@ -66,13 +63,6 @@ impl ChessPiece {
         };
     }
 
-    fn unwrap(&self) -> ChessColor {
-        match self.color() {
-            Some(val) => val,
-            _ => panic!("Trying to unwrap None piece"),
-        }
-    }
-
     fn str(&self) -> String {
         use ChessPiece::*;
 
@@ -101,11 +91,27 @@ impl ChessPiece {
  */
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub struct ChessMove {
+    /**
+     * The piece which moves.
+     */
     pub piece: ChessPiece,
+    /**
+     * The original position of the piece.
+     */
     pub origin: usize,
+    /**
+     * The target position of the piece.
+     */
     pub target: usize,
-    pub captures: Option<ChessPiece>,
-    pub promotes: Option<ChessPiece>,
+    /**
+     * The piece being captured or [ChessPiece::None].
+     */
+    pub captures: ChessPiece,
+    /**
+     * A piece to replace the current one with after the move or
+     * [ChessPiece::None]. Only used for pawn promotions.
+     */
+    pub promotes: ChessPiece,
 
     /* these could really be one enum but whatever */
     pub en_passant: bool,
@@ -117,8 +123,8 @@ impl ChessMove {
     fn to(piece: ChessPiece, origin: usize, target: usize) -> ChessMove {
         return ChessMove {
             piece, origin, target,
-            captures: None,
-            promotes: None,
+            captures: ChessPiece::None,
+            promotes: ChessPiece::None,
             en_passant: false,
             castles: false,
         };
@@ -127,8 +133,8 @@ impl ChessMove {
     fn captures(piece: ChessPiece, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
         return ChessMove {
             piece, origin, target,
-            captures: Some(captures),
-            promotes: None,
+            captures: captures,
+            promotes: ChessPiece::None,
             en_passant: false,
             castles: false,
         };
@@ -154,12 +160,17 @@ impl ChessMove {
         let rank1 = self.origin / 8 + 1;
         let file2 = char::from(b'a' + (self.target % 8) as u8);
         let rank2 = self.target / 8 + 1;
-        let captures = if self.captures != None {"x"} else {""};
+        let captures = if self.captures != ChessPiece::None {"x"} else {""};
         let ep = if self.en_passant {" e.p."} else {""};
-        let promotes = match &self.promotes {
-            Some(p) => format!("({})", p.str()),
-            None => String::from(""),
+        let promotes = if self.promotes == ChessPiece::None {
+            String::from("")
+        } else {
+            format!("({})", self.promotes.str())
         };
+        // let promotes = match &self.promotes {
+        //     Some(p) => format!("({})", p.str()),
+        //     None => String::from(""),
+        // };
         return format!("{piece}{file1}{rank1}{captures}{file2}{rank2}{promotes}{ep}");
     }
 }
@@ -177,8 +188,12 @@ pub struct ChessGame {
     can_castle_now_q: [bool; 2],
     en_passant_loc: [Option<(usize, usize)>; 2],
     next_moves: [Vec<ChessMove>; 2],
+    state: ChessState,
+    /**
+     * The color whose turn it currently is. Can be modified in place, but the
+     * helper function [ChessGame::switch_turn] exists to swap it.
+     */
     pub turn: ChessColor,
-    pub state: ChessState,
 }
 
 impl ChessGame {
@@ -219,7 +234,18 @@ impl ChessGame {
     }
 
     /**
-     * Load a custom board into the game.
+     * Returns an immutable reference to the current board. Index 0 is `a1` and
+     * the array follows rank-major order up to `h8`.
+     */
+    pub fn get_board(&self) -> &[ChessPiece; 64] {
+        return &self.board;
+    }
+
+    /**
+     * Load a custom board into the game. Disables castling for both players,
+     * which can be turned back on using [ChessGame::set_castle_eligibility] or
+     * [ChessGame::set_all_castle_eligibility]. Note that castling only works
+     * correctly when the king is placed in its normal location.
      */
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
         self.board = board;
@@ -268,13 +294,6 @@ impl ChessGame {
     }
 
     /**
-     * Returns an immutable reference to the current board.
-     */
-    pub fn get_board(&self) -> &[ChessPiece; 64] {
-        return &self.board;
-    }
-
-    /**
      * Switches the turn.
      */
     pub fn switch_turn(&mut self) {
@@ -297,9 +316,10 @@ impl ChessGame {
                 return false;
             }
 
-            self.board[mv.target] = match &mv.promotes {
-                Some(p) => p.clone(),
-                _ => self.board[mv.origin].clone(),
+            self.board[mv.target] = if mv.promotes == ChessPiece::None {
+                mv.piece
+            } else {
+                mv.promotes
             };
             self.board[mv.origin] = ChessPiece::None;
 
@@ -406,7 +426,7 @@ impl ChessGame {
 
         /* TODO: place in move generation and save as "next state?"
          * Would be useful for algebraic notation. */
-        if self.next_moves[self.turn as usize].iter().any(|x| x.captures == Some(ChessPiece::K(self.turn.opposite()))) {
+        if self.next_moves[self.turn as usize].iter().any(|x| x.captures == ChessPiece::K(self.turn.opposite())) {
             self.state = ChessState::Check;
         } else {
             self.state = ChessState::Normal;
@@ -427,7 +447,7 @@ impl ChessGame {
             let mut out: Vec<ChessMove> = Vec::new();
             for p in [R(col), N(col), B(col), Q(col)] {
                 let mut new_mv = mv;
-                new_mv.promotes = Some(p);
+                new_mv.promotes = p;
                 out.push(new_mv);
             }
             return out;
@@ -444,8 +464,8 @@ impl ChessGame {
         let piece = self.board[origin];
         let mut mv = ChessMove::to(piece, origin, target);
         mv.captures = match piece.color() {
-            Some(col) => Some(ChessPiece::P(col.opposite())),
-            _ => None,
+            Some(col) => ChessPiece::P(col.opposite()),
+            _ => ChessPiece::None,
         };
         mv.en_passant = true;
 
@@ -499,8 +519,10 @@ impl ChessGame {
     }
 
     fn collides_opponent(&self, i: usize, side: &ChessColor) -> bool {
-        return self.board[i] != ChessPiece::None
-            && self.board[i].unwrap() == side.opposite();
+        return match self.board[i].color() {
+            Some(col) => col == side.opposite(),
+            _ => false
+        }
     }
 
     fn pawn_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
@@ -730,7 +752,7 @@ impl ChessGame {
         let it = self.board.iter()
                            .enumerate()
                            .filter(|(_, x)| **x != None
-                                   && x.unwrap() == *side);
+                                   && x.color().unwrap() == *side);
         for (i, piece) in it {
             match piece {
                 P(_) => self.pawn_moves(i, &mut out, side),
@@ -757,7 +779,7 @@ impl ChessGame {
         self.apply_temp_move(&mv);
         let result = self.find_moves(&side.opposite())
                          .iter().all(|x| x.captures
-                                     != Some(ChessPiece::K(*side)));
+                                     != ChessPiece::K(*side));
         self.restore_temp_move();
         return result;
     }
@@ -1264,13 +1286,13 @@ mod tests {
         assert_eq!(ChessMove::captures(P(Wh), 4, 11, P(Bl)).algebraic(), "e1xd2");
         assert_eq!(ChessMove::to(R(Wh), 7, 23).algebraic(), "Rh1h3");
         let mut m1 = ChessMove::to(P(Wh), 55, 63);
-        m1.promotes = Some(Q(Wh));
+        m1.promotes = Q(Wh);
         assert_eq!(m1.algebraic(), "h7h8(Q)");
         let mut m2 = ChessMove::captures(P(Wh), 32, 41, P(Bl));
         m2.en_passant = true;
         assert_eq!(m2.algebraic(), "a5xb6 e.p.");
         m2.en_passant = false;
-        m2.promotes = Some(B(Wh));
+        m2.promotes = B(Wh);
         assert_eq!(m2.algebraic(), "a5xb6(B)");
     }
 }
