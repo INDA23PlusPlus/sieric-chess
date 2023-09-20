@@ -1,9 +1,16 @@
+/**
+ * State of a [ChessGame].
+ */
 #[derive(Debug,PartialEq,Eq)]
 pub enum ChessState {
     Normal,
     Check,
 }
 
+/**
+ * Represents one color in chess. Commonly used as indices in arrays when
+ * converted to [usize].
+ */
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessColor {
     Wh = 0,
@@ -15,12 +22,21 @@ impl ChessColor {
         return if *self == ChessColor::Wh { 1 } else { -1 };
     }
 
-    fn opposite(&self) -> ChessColor {
+    /**
+     * Returns the opposite [ChessColor].
+     */
+    pub fn opposite(&self) -> ChessColor {
         use ChessColor::*;
         return if *self == Wh { Bl } else { Wh };
     }
 }
 
+/**
+ * Representation of one chess piece as an enum. Uses common shorthands for
+ * pieces in algebraic notation, with pawns being `P`.
+ *
+ * All pieces except the `None` piece have an associated color.
+ */
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub enum ChessPiece {
     None,
@@ -33,6 +49,10 @@ pub enum ChessPiece {
 }
 
 impl ChessPiece {
+    /**
+     * Gets the color of the [ChessPiece] if it isn't [ChessPiece::None].
+     * Otherwise return [None].
+     */
     pub fn color(&self) -> Option<ChessColor> {
         use ChessPiece::*;
         return match self {
@@ -46,14 +66,14 @@ impl ChessPiece {
         };
     }
 
-    pub fn unwrap(&self) -> ChessColor {
+    fn unwrap(&self) -> ChessColor {
         match self.color() {
             Some(val) => val,
             _ => panic!("Trying to unwrap None piece"),
         }
     }
 
-    pub fn str(&self) -> String {
+    fn str(&self) -> String {
         use ChessPiece::*;
 
         return String::from(match self {
@@ -67,15 +87,18 @@ impl ChessPiece {
         });
     }
 
-    pub fn to(&self, origin: usize, target: usize) -> ChessMove {
+    fn to(&self, origin: usize, target: usize) -> ChessMove {
         return ChessMove::to(self.clone(), origin, target);
     }
 
-    pub fn captures(&self, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
+    fn captures(&self, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
         return ChessMove::captures(self.clone(), origin, target, captures);
     }
 }
 
+/**
+ * Representation of one move in chess.
+ */
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]
 pub struct ChessMove {
     piece: ChessPiece,
@@ -91,7 +114,7 @@ pub struct ChessMove {
 
 
 impl ChessMove {
-    pub fn to(piece: ChessPiece, origin: usize, target: usize) -> ChessMove {
+    fn to(piece: ChessPiece, origin: usize, target: usize) -> ChessMove {
         return ChessMove {
             piece, origin, target,
             captures: None,
@@ -101,7 +124,7 @@ impl ChessMove {
         };
     }
 
-    pub fn captures(piece: ChessPiece, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
+    fn captures(piece: ChessPiece, origin: usize, target: usize, captures: ChessPiece) -> ChessMove {
         return ChessMove {
             piece, origin, target,
             captures: Some(captures),
@@ -111,6 +134,12 @@ impl ChessMove {
         };
     }
 
+    /**
+     * Returns the move in algebraic notation (sort of).
+     *
+     * Does not contain information about checks, and contains redundant
+     * information about piece locations.
+     */
     pub fn algebraic(&self) -> String {
         if self.castles {
             return String::from(if self.target as isize - self.origin as isize == -2 {
@@ -121,9 +150,9 @@ impl ChessMove {
         }
 
         let piece = self.piece.str();
-        let file1 = char::from(97 + (self.origin % 8) as u8);
+        let file1 = char::from(b'a' + (self.origin % 8) as u8);
         let rank1 = self.origin / 8 + 1;
-        let file2 = char::from(97 + (self.target % 8) as u8);
+        let file2 = char::from(b'a' + (self.target % 8) as u8);
         let rank2 = self.target / 8 + 1;
         let captures = if self.captures != None {"x"} else {""};
         let ep = if self.en_passant {" e.p."} else {""};
@@ -135,6 +164,9 @@ impl ChessMove {
     }
 }
 
+/**
+ * Representation of one game of chess
+ */
 #[derive(Debug)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
@@ -150,6 +182,9 @@ pub struct ChessGame {
 }
 
 impl ChessGame {
+    /**
+     * Create a new [ChessGame] with the default chess board.
+     */
     pub fn new() -> ChessGame {
         use ChessPiece::*;
         use ChessColor::*;
@@ -178,11 +213,14 @@ impl ChessGame {
             state: ChessState::Normal
         };
         /* HACK: calculate initial game state by doing nothing */
-        game.apply_move(&ChessMove::to(None, 16, 16), true);
+        game.apply_move(&ChessMove::to(None, 16, 16));
 
         return game;
     }
 
+    /**
+     * Load a custom board into the game.
+     */
     pub fn load_board(&mut self, board: [ChessPiece; 64]) {
         self.board = board;
 
@@ -191,9 +229,17 @@ impl ChessGame {
         self.can_castle_q = [false; 2];
 
         /* HACK: calculate game state by doing nothing */
-        self.apply_move(&ChessMove::to(ChessPiece::None, 16, 16), true);
+        self.apply_move(&ChessMove::to(ChessPiece::None, 16, 16));
     }
 
+    /**
+     * Sets the eligibility to castle for one player (`side`) on either queens
+     * or kings side. When `queens` is true set eligibility for queens side
+     * castling to `state`, otherwise do the same for kings side.
+     *
+     * This could be useful after running [ChessGame::load_board] with custom
+     * boards.
+     */
     pub fn set_castle_eligibility(&mut self, side: &ChessColor, queens: bool, state: bool) {
         if queens {
             self.can_castle_q[*side as usize] = state;
@@ -202,31 +248,53 @@ impl ChessGame {
         }
 
         /* HACK: update game state by doing nothing */
-        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0), true);
+        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0));
     }
 
+    /**
+     * Sets the castle eligibility for both black and white on `kings` and
+     * `queens` side. The arguments are arrays where the indices are
+     * [ChessColor]s as [usize].
+     *
+     * This could be useful after running [ChessGame::load_board] with custom
+     * boards.
+     */
     pub fn set_all_castle_eligibility(&mut self, kings: [bool; 2], queens: [bool; 2]) {
         self.can_castle_q = queens;
         self.can_castle_k = kings;
 
         /* HACK: update game state by doing nothing */
-        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0), true);
+        self.apply_move(&ChessMove::to(ChessPiece::None, 0, 0));
     }
 
+    /**
+     * Returns an immutable reference to the current board.
+     */
     pub fn get_board(&self) -> &[ChessPiece; 64] {
         return &self.board;
     }
 
+    /**
+     * Switches the turn.
+     */
     pub fn switch_turn(&mut self) {
         self.turn = self.turn.opposite();
     }
 
-    pub fn apply_move(&mut self, mv: &ChessMove, real: bool) {
+    /**
+     * Plays the provided move (`mv`). This does not automatically switch the
+     * turn, which must be done using [ChessGame::switch_turn].
+     */
+    pub fn apply_move(&mut self, mv: &ChessMove) -> bool {
+        return self.apply_move_internal(mv, true);
+    }
+
+    fn apply_move_internal(&mut self, mv: &ChessMove, real: bool) -> bool {
         /* HACK: Allow moves of None to update game state */
         if mv.piece != ChessPiece::None {
             if mv.piece != self.board[mv.origin] {
                 eprintln!("Illegal move");
-                return;
+                return false;
             }
 
             self.board[mv.target] = match &mv.promotes {
@@ -252,7 +320,7 @@ impl ChessGame {
         /* ignore lasting effects of non-real moves
          * eg. calls from `apply_temp_move` */
         if !real {
-            return;
+            return true;
         }
 
         /* check which squares can en passant next turn */
@@ -343,6 +411,8 @@ impl ChessGame {
         } else {
             self.state = ChessState::Normal;
         }
+
+        return true;
     }
 
     fn mv_promotion(&self, mv: ChessMove) -> Vec<ChessMove> {
@@ -367,7 +437,7 @@ impl ChessGame {
     }
 
     fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
-        return ChessMove::captures(self.board[origin], origin, target, self.board[target]);
+        return self.board[origin].captures(origin, target, self.board[target]);
     }
 
     fn mv_en_passant(&self, origin: usize, target: usize) -> ChessMove {
@@ -394,7 +464,7 @@ impl ChessGame {
 
     fn apply_temp_move(&mut self, mv: &ChessMove) {
         self.temp_board = self.board;
-        self.apply_move(mv, false);
+        self.apply_move_internal(mv, false);
     }
 
     fn restore_temp_move(&mut self) {
@@ -683,7 +753,7 @@ impl ChessGame {
         return out;
     }
 
-    pub fn is_move_legal(&mut self, side: &ChessColor, mv: &ChessMove) -> bool {
+    fn is_move_legal(&mut self, side: &ChessColor, mv: &ChessMove) -> bool {
         self.apply_temp_move(&mv);
         let result = self.find_moves(&side.opposite())
                          .iter().all(|x| x.captures
@@ -704,10 +774,44 @@ impl ChessGame {
         return out;
     }
 
+    /**
+     * Gets all legal moves for one `side`. This does not have to be the side
+     * whose turn it is right now.
+     *
+     * Will usually be called like this: `game.get_legal_moves(&game.turn);`
+     */
     pub fn get_legal_moves(&self, side: &ChessColor) -> Vec<ChessMove> {
         /* I hate the fact that I have to clone here becase the borrow checker
          * got angry with me */
         return self.next_moves[*side as usize].clone();
+    }
+
+    /**
+     * Returns [true] if the game is over.
+     */
+    pub fn is_ended(&self) -> bool {
+        return self.next_moves[self.turn as usize].is_empty();
+    }
+
+    /**
+     * Returns [true] if the current side is in check.
+     */
+    pub fn is_check(&self) -> bool {
+        return self.state == ChessState::Check;
+    }
+
+    /**
+     * Returns [true] if the game is over in checkmate.
+     */
+    pub fn is_checkmate(&self) -> bool {
+        return self.is_ended() && self.is_check();
+    }
+
+    /**
+     * Returns [true] if the game is over in stalemate.
+     */
+    pub fn is_stalemate(&self) -> bool {
+        return self.is_ended() && !self.is_check();
     }
 }
 
@@ -960,7 +1064,7 @@ mod tests {
             None, None, None,  None,  None,  None,  None, None,
             None, None, None,  None,  None,  None,  None, None,
         ]);
-        game.apply_move(&ChessMove::to(R(Wh), 21, 19), true);
+        game.apply_move(&ChessMove::to(R(Wh), 21, 19));
         game.switch_turn();
 
         assert_eq!(game.state, ChessState::Check);
@@ -984,7 +1088,7 @@ mod tests {
             None, None, None,  None,  None,  None,  None, None,
             None, None, None,  None,  None,  None,  None, None,
         ]);
-        game.apply_move(&ChessMove::to(R(Wh), 21, 13), true);
+        game.apply_move(&ChessMove::to(R(Wh), 21, 13));
         game.switch_turn();
 
         assert_eq!(game.state, ChessState::Normal);
@@ -1009,13 +1113,13 @@ mod tests {
             None,  None,  None, None,  None,  None,  None, None,
         ]);
         {
-            game.apply_move(&ChessMove::to(P(Wh), 8, 24), true);
+            game.apply_move(&ChessMove::to(P(Wh), 8, 24));
             let moves = game.get_legal_moves(&Bl);
             assert!(moves.contains(&game.mv_en_passant(25, 16)));
         }
 
         {
-            game.apply_move(&ChessMove::to(P(Wh), 12, 28), true);
+            game.apply_move(&ChessMove::to(P(Wh), 12, 28));
             let moves = game.get_legal_moves(&Bl);
             assert!(moves.contains(&game.mv_en_passant(27, 20)));
             assert!(moves.contains(&game.mv_en_passant(29, 20)));
