@@ -345,6 +345,27 @@ impl ChessGame {
         }
     }
 
+    fn mv_promotion(&self, mv: ChessMove) -> Vec<ChessMove> {
+        let col = match mv.piece.color() {
+            Some(col) => col,
+            _ => return Vec::new(),
+        };
+
+        if mv.target > 55 || mv.target < 8 {
+            use ChessPiece::*;
+
+            let mut out: Vec<ChessMove> = Vec::new();
+            for p in [R(col), N(col), B(col), Q(col)] {
+                let mut new_mv = mv;
+                new_mv.promotes = Some(p);
+                out.push(new_mv);
+            }
+            return out;
+        } else {
+            return vec![mv];
+        }
+    }
+
     fn mv_captures(&self, origin: usize, target: usize) -> ChessMove {
         return ChessMove::captures(self.board[origin], origin, target, self.board[target]);
     }
@@ -422,10 +443,11 @@ impl ChessGame {
         };
 
         if !collides {
-            out.push(piece.to(i, pos));
+            out.extend(self.mv_promotion(piece.to(i, pos)));
             if (i < 16 && i > 7) || (i < 56 && i > 47) {
                 match self.step(i, 0, 2, side) {
                     Some(t) => if !self.collides(t) {
+                        /* NOTE: can never be a promotion */
                         out.push(piece.to(i, t));
                     },
                     _ => (),
@@ -434,24 +456,20 @@ impl ChessGame {
         }
 
         /* captures */
-        match self.step(i, 1, 1, side) {
-            Some(t) => if self.collides_opponent(t, side) {
-                out.push(self.mv_captures(i, t));
-            },
-            _ => (),
-        }
-
-        match self.step(i, -1, 1, side) {
-            Some(t) => if self.collides_opponent(t, side) {
-                out.push(self.mv_captures(i, t));
-            },
-            _ => (),
+        for pos in [self.step(i, 1, 1, side), self.step(i, -1, 1, side)] {
+            match pos {
+                Some(t) => if self.collides_opponent(t, side) {
+                    out.extend(self.mv_promotion(self.mv_captures(i, t)));
+                },
+                _ => (),
+            }
         }
 
         /* en passant */
         for loc in self.en_passant_loc {
             match loc {
                 Some((origin, target)) => if i == origin {
+                    /* NOTE: can never be a promotion */
                     out.push(self.mv_en_passant(origin, target))
                 },
                 _ => (),
@@ -729,8 +747,8 @@ mod tests {
             None,  None, None,  None, P(Bl), None,  None, None,
             P(Wh), None, None,  None, None,  None,  None, None,
             None,  None, None,  None, None,  None,  None, None,
-            None,  None, None,  None, None,  None,  None, None,
             None,  None, P(Wh), None, None,  None,  None, None,
+            None,  None, None,  None, None,  None,  None, None,
             None,  None, None,  None, None,  None,  None, None,
         ]);
 
@@ -744,7 +762,7 @@ mod tests {
             ChessMove::to(P(Wh), 13, 29),
             ChessMove::to(P(Wh), 24, 32),
             ChessMove::captures(P(Wh), 13, 20, P(Bl)),
-            ChessMove::to(P(Wh), 50, 58),
+            ChessMove::to(P(Wh), 42, 50),
         ]));
     }
 
@@ -1096,6 +1114,41 @@ mod tests {
         let moves = game.get_legal_moves(&Bl);
         assert!(!moves.contains(&game.mv_castle(&Bl, false)));
         assert!(moves.contains(&game.mv_castle(&Bl, true)));
+    }
+
+    #[test]
+    fn promotion() {
+        use ChessPiece::*;
+        use ChessColor::*;
+
+        let mut game = ChessGame::new();
+        game.load_board([
+            None, None, None, None, K(Wh), None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, P(Wh), None,
+            None, None, None, None, K(Bl), B(Bl), None, R(Bl),
+        ]);
+
+        let moves: HashSet<ChessMove> = game.get_legal_moves(&game.turn).into_iter().collect();
+        {
+            let moves2: HashSet<ChessMove>
+                = game.mv_promotion(ChessMove::to(P(Wh), 54, 62)).into_iter().collect();
+            assert!(moves.is_superset(&moves2))
+        }
+        {
+            let moves2: HashSet<ChessMove>
+                = game.mv_promotion(ChessMove::captures(P(Wh), 54, 61, B(Bl))).into_iter().collect();
+            assert!(moves.is_superset(&moves2))
+        }
+        {
+            let moves2: HashSet<ChessMove>
+                = game.mv_promotion(ChessMove::captures(P(Wh), 54, 63, R(Bl))).into_iter().collect();
+            assert!(moves.is_superset(&moves2))
+        }
     }
 
     #[test]
