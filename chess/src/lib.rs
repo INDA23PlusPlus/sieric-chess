@@ -312,7 +312,8 @@ impl ChessGame {
         /* HACK: Allow moves of None to update game state */
         if mv.piece != ChessPiece::None {
             if mv.piece != self.board[mv.origin] {
-                eprintln!("Illegal move");
+                eprintln!("Illegal move: board:{:?} move:{:?}",
+                          self.board[mv.origin], mv);
                 return false;
             }
 
@@ -476,7 +477,7 @@ impl ChessGame {
         use ChessPiece::*;
         use ChessColor::*;
 
-        let king = if *side == Wh {4} else {56};
+        let king = if *side == Wh {4} else {60};
         let mut mv = ChessMove::to(K(*side), king, if queens {king - 2} else {king + 2});
         mv.castles = true;
         return mv;
@@ -1194,6 +1195,18 @@ mod tests {
         let moves = game.get_legal_moves(&Wh);
         assert!(moves.contains(&game.mv_castle(&Wh, false)));
         assert!(!moves.contains(&game.mv_castle(&Wh, true)));
+
+        game.apply_move(&game.mv_castle(&Wh, false));
+        assert_eq!(game.get_board(), &[
+            R(Wh), None, None, None, None, R(Wh), K(Wh), None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, Q(Bl), None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, K(Bl), None, None, None,
+        ]);
     }
 
     #[test]
@@ -1240,6 +1253,18 @@ mod tests {
         let moves = game.get_legal_moves(&Bl);
         assert!(!moves.contains(&game.mv_castle(&Bl, false)));
         assert!(moves.contains(&game.mv_castle(&Bl, true)));
+
+        game.apply_move(&game.mv_castle(&Bl, true));
+        assert_eq!(game.get_board(), &[
+            None, None, None, None, K(Wh), None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, Q(Wh), None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            None, None, K(Bl), R(Bl), None, None, None, R(Bl),
+        ]);
     }
 
     #[test]
