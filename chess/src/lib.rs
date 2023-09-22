@@ -1,4 +1,4 @@
-#[derive(Debug,PartialEq,Eq)]
+#[derive(Debug,Copy,Clone,PartialEq,Eq)]
 enum ChessState {
     Normal,
     Check,
@@ -175,7 +175,7 @@ impl ChessMove {
 /**
  * Representation of one game of chess
  */
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct ChessGame {
     board: [ChessPiece; 64],
     temp_board: [ChessPiece; 64],
