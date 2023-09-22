@@ -167,10 +167,7 @@ impl ChessMove {
         } else {
             format!("({})", self.promotes.str())
         };
-        // let promotes = match &self.promotes {
-        //     Some(p) => format!("({})", p.str()),
-        //     None => String::from(""),
-        // };
+
         return format!("{piece}{file1}{rank1}{captures}{file2}{rank2}{promotes}{ep}");
     }
 }
@@ -786,15 +783,11 @@ impl ChessGame {
     }
 
     fn find_legal_moves(&mut self, side: &ChessColor) -> Vec<ChessMove> {
-        let moves = self.find_moves(side);
-        let mut out: Vec<ChessMove> = Vec::new();
-        for mv in moves.iter() {
-            if self.is_move_legal(side, mv) {
-                out.push(*mv);
-            }
-        }
-
-        return out;
+        return self.find_moves(side)
+                   .iter()
+                   .filter(|mv| self.is_move_legal(side, mv))
+                   .copied()
+                   .collect();
     }
 
     /**
