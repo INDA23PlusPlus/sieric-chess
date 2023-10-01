@@ -570,7 +570,7 @@ impl ChessGame {
     fn rook_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, 0, j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -584,7 +584,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, j, 0) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -598,7 +598,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, 0, -j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -612,7 +612,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, -j, 0) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -656,7 +656,7 @@ impl ChessGame {
     fn bishop_moves(&self, i: usize, out: &mut Vec<ChessMove>, side: &ChessColor) {
         let piece = &self.board[i];
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, j, j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -670,7 +670,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, -j, j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -684,7 +684,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, j, -j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
@@ -698,7 +698,7 @@ impl ChessGame {
             }
         }
 
-        for j in 1..7 {
+        for j in 1..8 {
             match self.step_real(i, -j, -j) {
                 Some(t) => if self.collides_opponent(t, side) {
                     out.push(self.mv_captures(i, t));
